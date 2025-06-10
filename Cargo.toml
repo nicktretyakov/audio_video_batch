@@ -1,0 +1,27 @@
+[package]
+name = "video-audio-processor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ffmpeg-next = "6.0"
+tch = { version = "0.16", optional = true }
+image = "0.24"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+clap = { version = "4.0", features = ["derive"] }
+indicatif = "0.17"
+rayon = "1.7"
+# Use specific release candidate version for ONNX Runtime
+ort = { version = "2.0.0-rc.10", optional = true }
+# Candle as alternative ML framework
+candle-core = { version = "0.3", optional = true }
+candle-nn = { version = "0.3", optional = true }
+
+[features]
+default = ["mock-ml"]
+pytorch = ["tch"]
+onnx = ["ort"]
+candle = ["candle-core", "candle-nn"]
+mock-ml = []                          # Use mock implementations for ML

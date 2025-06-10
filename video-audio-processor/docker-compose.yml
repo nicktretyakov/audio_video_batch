@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Basic video processor with mock ML
+  video-processor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: video-audio-processor
+    volumes:
+      - ./input_videos:/app/input_videos:ro
+      - ./output_results:/app/output_results
+      - ./models:/app/models:ro
+    environment:
+      - RUST_LOG=info
+    command: ["batch"]
+    restart: unless-stopped
+
+  # PyTorch-enabled processor
+  video-processor-pytorch:
+    build:
+      context: .
+      dockerfile: Dockerfile.pytorch
+    container_name: video-audio-processor-pytorch
+    volumes:
+      - ./input_videos:/app/input_videos:ro
+      - ./output_results:/app/output_results
+      - ./models:/app/models:ro
+    environment:
+      - RUST_LOG=info
+      - CUDA_VISIBLE_DEVICES=0
+    command: ["batch"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ONNX-enabled processor
+  video-processor-onnx:
+    build:
+      context: .
+      dockerfile: Dockerfile.onnx
+    container_name: video-audio-processor-onnx
+    volumes:
+      - ./input_videos:/app/input_videos:ro
+      - ./output_results:/app/output_results
+      - ./models:/app/models:ro
+    environment:
+      - RUST_LOG=info
+    command: ["batch"]
+    restart: unless-stopped
+
+  # Web interface (optional)
+  web-interface:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: video-processor-web
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./input_videos:/app/input_videos
+      - ./output_results:/app/output_results:ro
+      - ./models:/app/models:ro
+    environment:
+      - RUST_LOG=info
+    depends_on:
+      - video-processor
+    restart: unless-stopped
+
+volumes:
+  input_videos:
+  output_results:
+  models:
+
+networks:
+  default:
+    name: video-processor-network

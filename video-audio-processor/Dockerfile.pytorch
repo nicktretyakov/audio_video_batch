@@ -1,0 +1,75 @@
+# PyTorch-enabled build
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-devel as pytorch-base
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libavfilter-dev \
+    libavdevice-dev \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+ENV RUST_VERSION=1.75.0
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION}
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Set PyTorch environment variables
+ENV LIBTORCH=/opt/conda/lib/python3.10/site-packages/torch
+ENV LD_LIBRARY_PATH=${LIBTORCH}/lib:$LD_LIBRARY_PATH
+
+WORKDIR /app
+
+# Copy Cargo files
+COPY Cargo.toml Cargo.lock ./
+
+# Create dummy main.rs for dependency caching
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies with PyTorch support
+RUN cargo build --release --features pytorch
+RUN rm -rf src
+
+# Copy source code
+COPY src ./src
+
+# Build the application with PyTorch
+RUN cargo build --release --features pytorch
+
+# Runtime stage
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime as pytorch-runtime
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd -m -u 1000 appuser
+
+WORKDIR /app
+
+# Copy binary from build stage
+COPY --from=pytorch-base /app/target/release/video-audio-processor /usr/local/bin/
+
+# Create directories
+RUN mkdir -p input_videos output_results frames models && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD video-audio-processor --help || exit 1
+
+ENTRYPOINT ["video-audio-processor"]
+CMD ["--help"]

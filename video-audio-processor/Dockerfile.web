@@ -1,0 +1,90 @@
+# Web interface for video processor
+FROM node:18-alpine as web-builder
+
+WORKDIR /web
+
+# Copy package files
+COPY web/package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy web source
+COPY web/ ./
+
+# Build web interface
+RUN npm run build
+
+# Rust backend stage
+FROM ubuntu:22.04 as backend-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RUST_VERSION=1.75.0
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libavutil-dev \
+    libswscale-dev \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION}
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /app
+
+# Copy Cargo files
+COPY Cargo.toml Cargo.lock ./
+
+# Add web server dependencies to Cargo.toml
+RUN echo '\naxum = "0.7"\ntokio = { version = "1.0", features = ["full"] }\ntower = "0.4"\ntower-http = { version = "0.5", features = ["fs", "cors"] }\nserde_json = "1.0"' >> Cargo.toml
+
+# Create dummy main for caching
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release --features mock-ml
+RUN rm -rf src
+
+# Copy source
+COPY src ./src
+
+# Build with web server
+RUN cargo build --release --features mock-ml
+
+# Runtime stage
+FROM ubuntu:22.04 as runtime
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd -m -u 1000 appuser
+
+WORKDIR /app
+
+# Copy binary
+COPY --from=backend-builder /app/target/release/video-audio-processor /usr/local/bin/
+
+# Copy web assets
+COPY --from=web-builder /web/dist ./web/dist
+
+# Create directories
+RUN mkdir -p input_videos output_results frames models && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8080
+
+ENTRYPOINT ["video-audio-processor"]
+CMD ["web"]
