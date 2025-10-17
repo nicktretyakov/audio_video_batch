@@ -85,22 +85,5 @@ export MAX_CONCURRENT_VIDEOS=8
 export CONFIDENCE_THRESHOLD=0.8
 cargo run batch
 
-## 📁 Project Structure
 
-
-video-audio-processor/
-├── src/
-│   ├── main.rs              # Main application entry
-│   ├── video_processor.rs   # Video frame extraction
-│   ├── frame_analyzer.rs    # ML frame analysis
-│   ├── audio_processor.rs   # Audio extraction & transcription
-│   ├── ml_backend.rs        # ML backend abstraction
-│   ├── batch_processor.rs   # Batch processing logic
-│   └── synchronizer.rs      # Result synchronization
-├── input_videos/            # Place videos here for batch processing
-├── output_results/          # Processing results appear here
-├── models/                  # ML model files
-├── docker/                  # Docker configurations
-├── scripts/                 # Utility scripts
-└── docs/                    # Documentation
 
